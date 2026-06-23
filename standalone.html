@@ -1,0 +1,777 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>YKS OMR Reader</title>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <style>
+    :root { --bg: #f8fafc; --card: #fff; --line: #e2e8f0; --ink: #0f172a; --muted: #64748b;
+            --accent: #4f46e5; --good: #16a34a; --bad: #dc2626; --warn: #ca8a04; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.45 system-ui, -apple-system, sans-serif; color: var(--ink); background: var(--bg); }
+    header { background: var(--card); border-bottom: 1px solid var(--line); padding: 12px 24px; display: flex; gap: 16px; align-items: center; position: sticky; top: 0; z-index: 5; }
+    header h1 { margin: 0; font-size: 17px; font-weight: 600; }
+    nav button { background: none; border: none; color: var(--muted); padding: 6px 10px; cursor: pointer; font: inherit; border-radius: 6px; }
+    nav button.active { color: var(--accent); background: #eef2ff; font-weight: 500; }
+    main { max-width: 1180px; margin: 0 auto; padding: 24px; }
+    .page { display: none; }
+    .page.active { display: block; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+    h2 { margin: 0 0 8px; font-size: 18px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .upload { border: 2px dashed var(--line); border-radius: 10px; padding: 32px; text-align: center; background: var(--card); cursor: pointer; }
+    .upload.drag { border-color: var(--accent); background: #eef2ff; }
+    .upload img { max-height: 240px; border-radius: 6px; margin-bottom: 8px; }
+    button.primary { background: var(--accent); color: #fff; border: 0; padding: 8px 14px; border-radius: 6px; font-weight: 500; cursor: pointer; font: inherit; }
+    button.primary:disabled { background: #cbd5e1; cursor: not-allowed; }
+    button.ghost { background: #fff; color: var(--ink); border: 1px solid var(--line); padding: 8px 14px; border-radius: 6px; cursor: pointer; font: inherit; }
+    button.success { background: var(--good); color: #fff; border: 0; padding: 8px 14px; border-radius: 6px; font-weight: 500; cursor: pointer; font: inherit; }
+    button.danger-link { background: none; border: 0; color: var(--bad); cursor: pointer; font-size: 12px; padding: 4px 8px; border-radius: 4px; }
+    button.danger-link:hover { background: #fee2e2; }
+    .error { background: #fee2e2; border: 1px solid #fecaca; color: #991b1b; padding: 10px; border-radius: 6px; margin: 12px 0; }
+    input, textarea, select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
+    textarea { width: 100%; resize: vertical; font-family: ui-monospace, monospace; font-size: 12px; }
+    .row { display: grid; grid-template-columns: 1fr 380px; gap: 24px; align-items: start; }
+    @media (max-width: 900px) { .row { grid-template-columns: 1fr; } }
+    .qrow { display: grid; grid-template-columns: 32px 1fr; align-items: center; gap: 8px; padding: 3px 0; }
+    .qnum { text-align: right; font-size: 11px; color: var(--muted); font-family: ui-monospace, monospace; }
+    .bubbles { display: flex; gap: 4px; }
+    .bub { width: 26px; height: 26px; border-radius: 50%; border: 1px solid #cbd5e1; background: #fff; font-size: 11px; font-weight: 500; color: var(--muted); cursor: pointer; }
+    .bub.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .bub.blank { width: auto; height: 26px; border-radius: 4px; padding: 0 8px; font-size: 11px; }
+    .bub.blank.active { background: #e2e8f0; color: var(--ink); border-color: #94a3b8; }
+    .sec-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 8px; }
+    .score-chip { font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted); }
+    .sec-body { max-height: 360px; overflow-y: auto; padding: 4px; }
+    .total-score { background: #eef2ff; padding: 12px; border-radius: 6px; }
+    .total-net { font-size: 26px; font-weight: 700; color: var(--accent); margin: 4px 0; }
+    .score-line { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
+    code { font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 8px 10px; background: #f1f5f9; font-weight: 500; border-bottom: 1px solid var(--line); }
+    th.r { text-align: right; }
+    th.c { text-align: center; }
+    td { padding: 8px 10px; border-bottom: 1px solid var(--line); }
+    td.r { text-align: right; font-family: ui-monospace, monospace; }
+    td.c { text-align: center; }
+    tr:hover { background: #fafbfc; }
+    .badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-family: ui-monospace, monospace; font-size: 11px; background: #e2e8f0; color: var(--ink); }
+    .badge.warn { background: #fef3c7; color: #92400e; }
+    .badge.err { background: #fee2e2; color: #991b1b; }
+    .info-field { font-size: 13px; padding: 4px 0; }
+    .info-field b { color: var(--muted); display: inline-block; min-width: 110px; font-weight: 500; font-size: 11px; text-transform: uppercase; }
+    .key-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+    .key-row:last-child { border-bottom: 0; }
+    .key-meta { font-size: 11px; color: var(--muted); font-family: ui-monospace, monospace; }
+    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .section-input { margin-bottom: 12px; }
+    .section-input label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+    label.config { font-size: 12px; color: var(--muted); display: block; margin-top: 12px; }
+    label.config input { width: 100%; padding: 4px 6px; font-family: ui-monospace, monospace; font-size: 11px; margin-top: 2px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>YKS OMR Reader</h1>
+  <nav>
+    <button data-page="scan" class="active">Tek tarama</button>
+    <button data-page="batch">Toplu tarama</button>
+    <button data-page="keys">Cevap anahtarları</button>
+  </nav>
+  <div style="margin-left:auto;">
+    <details>
+      <summary style="cursor:pointer; color:var(--muted); font-size:12px;">⚙</summary>
+      <label class="config" style="position:absolute; right:20px; background:#fff; padding:8px; border:1px solid var(--line); border-radius:6px; box-shadow:0 4px 10px rgba(0,0,0,.08);">Backend
+        <input id="apiBase" value="http://127.0.0.1:8765" style="width:240px;" />
+      </label>
+    </details>
+  </div>
+</header>
+
+<main>
+  <div id="error-bar" class="error" style="display:none;"></div>
+
+  <!-- ============ SCAN (single) ============ -->
+  <section id="page-scan" class="page active">
+    <div class="card">
+      <h2>Optik Cevap Kâğıdı Yükle</h2>
+      <p class="muted">Tarayıcı çıktısı (PNG/JPG/TIF) veya telefon fotoğrafı. OPTIK-129 formatı.</p>
+    </div>
+    <label id="dropZone" class="upload" for="filePick">
+      <div id="placeholder">
+        <p>Dosyayı sürükle veya tıkla</p>
+        <p class="muted">PNG · JPG · TIF</p>
+      </div>
+      <input id="filePick" type="file" accept="image/*,.pdf,application/pdf" style="display:none" />
+    </label>
+    <div id="scanActions" style="display:none; margin-top:12px;">
+      <button id="scanBtn" class="primary">Taramayı başlat</button>
+      <button id="scanClearBtn" class="ghost">Temizle</button>
+    </div>
+    <div id="scanResults" style="display:none; margin-top:24px;"></div>
+  </section>
+
+  <!-- ============ BATCH ============ -->
+  <section id="page-batch" class="page">
+    <div class="card">
+      <h2>Toplu Tarama (ZIP)</h2>
+      <p class="muted">Sınıfın tüm optiklerini ZIP olarak at, hepsi taransın, anahtarla skorlanıp tabloda göster, CSV indir.</p>
+    </div>
+    <label class="upload" for="zipPick">
+      <p>ZIP veya çoklu dosya sürükle / seç</p>
+      <p class="muted" id="zipLabel">.zip · veya birden çok .png / .jpg / .tif / .pdf birlikte</p>
+      <input id="zipPick" type="file" accept=".zip,.pdf,image/*" multiple style="display:none" />
+    </label>
+    <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:12px;">
+      <button id="batchScanBtn" class="primary" disabled>Hepsini tara</button>
+      <select id="batchKeySelect" style="min-width:240px;"></select>
+      <button id="batchScoreBtn" class="success" disabled>Hepsini skorla</button>
+      <button id="batchCsvBtn" class="ghost" disabled>CSV indir</button>
+      <button id="batchXlsxBtn" class="ghost" disabled>Excel indir</button>
+      <button id="batchTxtBtn" class="ghost" disabled>TXT indir</button>
+      <button id="batchSekonicBtn" class="ghost" disabled>OMR .txt (SEKONIC)</button>
+      <button id="batchExamXlsxBtn" class="ghost" disabled>Cevap Excel (deneme)</button>
+    </div>
+    <div id="batchTable" style="margin-top:16px;"></div>
+  </section>
+
+  <!-- ============ KEYS ============ -->
+  <section id="page-keys" class="page">
+    <div class="card">
+      <h2>Cevap Anahtarları</h2>
+      <p class="muted">Skorlama için kullanılan anahtarlar. Test-fixture'lar silinemez.</p>
+      <div id="keysList"></div>
+    </div>
+    <div class="card">
+      <h2>Yeni anahtar ekle</h2>
+      <div class="grid3">
+        <input id="newKeyId" placeholder="id (örn. tyt-deneme-12)" />
+        <input id="newKeyName" placeholder="görünür ad" />
+        <select id="newKeySheetType">
+          <option value="TYT">TYT</option>
+          <option value="AYT">AYT</option>
+          <option value="YDT">YDT</option>
+        </select>
+      </div>
+      <div class="muted" style="background:#f1f5f9; padding:8px; border-radius:6px; margin-bottom:12px;">
+        <strong>Format:</strong> harfleri yapıştır. Sırayla yaz <code>ABCDE ABCDE...</code> (1A 2B 3C 4D 5E ...).
+        Numaralı yaz: <code>1A 2B 3C ...</code>. Boş bırakmak için <code>X</code>.
+      </div>
+      <div id="newKeySections"></div>
+      <button id="newKeySaveBtn" class="primary">Anahtarı kaydet</button>
+    </div>
+  </section>
+</main>
+
+<script>
+// ============ Utilities ============
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+const OPTIONS = ['A','B','C','D','E'];
+const SECTIONS = [
+  { name: 'Türkçe', rows: 40 },
+  { name: 'Sosyal Bilimler', rows: 30 },
+  { name: 'Temel Matematik', rows: 40 },
+  { name: 'Fen Bilimleri', rows: 20 },
+];
+
+const apiBase = () => $('#apiBase').value.replace(/\/$/, '');
+
+function showError(msg) { const el = $('#error-bar'); el.textContent = msg; el.style.display = 'block'; }
+function clearError() { $('#error-bar').style.display = 'none'; }
+
+async function api(path, opts = {}) {
+  const res = await fetch(apiBase() + path, opts);
+  if (!res.ok) {
+    let detail = res.statusText;
+    try { detail = (await res.json()).detail || detail; } catch {}
+    throw new Error(res.status + ': ' + detail);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+// ============ Nav ============
+$$('nav button').forEach(b => b.addEventListener('click', () => {
+  const p = b.dataset.page;
+  $$('nav button').forEach(x => x.classList.toggle('active', x === b));
+  $$('.page').forEach(x => x.classList.toggle('active', x.id === 'page-' + p));
+  if (p === 'keys') loadKeys();
+  else if (p === 'batch') loadBatchKeys();
+}));
+
+// ============ SCAN (single) ============
+let scanFile = null;
+let scanData = null;
+let scanAnswers = {};
+
+function setupSingleUpload() {
+  const drop = $('#dropZone'); const input = $('#filePick');
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.classList.remove('drag');
+    if (e.dataTransfer.files[0]) acceptScanFile(e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', () => { if (input.files[0]) acceptScanFile(input.files[0]); });
+}
+function acceptScanFile(file) {
+  scanFile = file; clearError();
+  const url = URL.createObjectURL(file);
+  $('#placeholder').innerHTML = '<img src="' + url + '" alt="" /><p>' + file.name + ' (' + Math.round(file.size/1024) + ' KB)</p><p class="muted">Başka dosya için tıkla</p>';
+  $('#scanActions').style.display = 'block';
+}
+$('#scanClearBtn').addEventListener('click', () => { scanFile = null; scanData = null; $('#scanActions').style.display = 'none'; $('#scanResults').style.display = 'none'; $('#placeholder').innerHTML = '<p>Dosyayı sürükle veya tıkla</p><p class="muted">PNG · JPG · TIF</p>'; });
+
+$('#scanBtn').addEventListener('click', async () => {
+  if (!scanFile) return;
+  clearError();
+  const btn = $('#scanBtn'); btn.disabled = true; btn.textContent = 'Taranıyor...';
+  try {
+    const form = new FormData(); form.append('photo', scanFile);
+    scanData = await api('/api/scan', { method: 'POST', body: form });
+    scanAnswers = {};
+    for (const [sec, val] of Object.entries(scanData.decoded)) {
+      if (val && typeof val === 'object' && 'answers' in val) scanAnswers[sec] = { ...val.answers };
+    }
+    renderScanResults();
+  } catch (e) { showError(e.message); }
+  finally { btn.disabled = false; btn.textContent = 'Taramayı başlat'; }
+});
+
+function renderScanResults() {
+  const r = $('#scanResults'); r.style.display = 'block';
+  const infoFields = ['ADI_SOYADI','TC_KIMLIK','OKUL_KODU','OGRENCI_NUMARASI','KITAPCIK_TURU','GRUP_NO','SINIF_SUBE','ALAN'];
+  const infoHtml = infoFields.map(f => {
+    const v = scanData.decoded[f];
+    const display = (v === null || v === '' || v === ' ') ? '<em class="muted">—</em>' : v;
+    return '<div class="info-field"><b>' + f + '</b> ' + display + '</div>';
+  }).join('');
+  const sectionsHtml = Object.keys(scanAnswers).map(sec => sectionCardHtml(sec)).join('');
+  r.innerHTML = `
+    <div class="row">
+      <div>
+        <div class="card">
+          <div class="sec-head"><strong>Bilgi alanları</strong><code>scan_id: ${scanData.scan_id.slice(0,8)}…</code></div>
+          ${infoHtml}
+        </div>
+        ${sectionsHtml}
+      </div>
+      <aside>
+        <div class="card">
+          <strong>Debug overlay</strong>
+          <img src="${apiBase()}${scanData.debug_image_url}" style="width:100%; margin-top:8px; border-radius:6px;" />
+        </div>
+        <div class="card">
+          <strong>Cevap anahtarı ile skor</strong>
+          <select id="scanKeySelect" style="margin-top:8px; width:100%;"><option value="">Yükleniyor...</option></select>
+          <button id="scanScoreBtn" class="primary" style="margin-top:8px; width:100%;" disabled>Skorla</button>
+          <div id="scanScorePanel" style="margin-top:12px;"></div>
+        </div>
+      </aside>
+    </div>
+  `;
+  attachSingleAnswerHandlers();
+  loadKeysIntoSelect('#scanKeySelect');
+  $('#scanKeySelect').addEventListener('change', e => { $('#scanScoreBtn').disabled = !e.target.value; $('#scanScorePanel').innerHTML = ''; });
+  $('#scanScoreBtn').addEventListener('click', computeScanScore);
+}
+function sectionCardHtml(sec) {
+  const ans = scanAnswers[sec];
+  const rows = Object.keys(ans).sort((a,b)=>Number(a)-Number(b)).map(q => qRowHtml(sec, q, ans[q])).join('');
+  return `<div class="card" data-section="${sec}">
+    <div class="sec-head"><strong>${sec}</strong><span class="score-chip" data-section-score></span></div>
+    <div class="sec-body">${rows}</div>
+  </div>`;
+}
+function qRowHtml(sec, q, val) {
+  const bubs = OPTIONS.map(L => `<button class="bub ${val===L?'active':''}" data-set="${sec}|${q}|${L}">${L}</button>`).join('');
+  const blank = `<button class="bub blank ${val===null?'active':''}" data-set="${sec}|${q}|">boş</button>`;
+  return `<div class="qrow"><div class="qnum">${q}</div><div class="bubbles">${bubs}${blank}</div></div>`;
+}
+function attachSingleAnswerHandlers() {
+  $$('[data-set]').forEach(b => b.addEventListener('click', () => {
+    const [sec, q, L] = b.dataset.set.split('|');
+    const newVal = L === '' ? null : (scanAnswers[sec][q] === L ? null : L);
+    scanAnswers[sec][q] = newVal;
+    const card = $(`[data-section="${sec}"] .sec-body`);
+    card.innerHTML = Object.keys(scanAnswers[sec]).sort((a,b)=>Number(a)-Number(b)).map(qk => qRowHtml(sec, qk, scanAnswers[sec][qk])).join('');
+    attachSingleAnswerHandlers();
+    $('#scanScorePanel').innerHTML = '';
+  }));
+}
+async function loadKeysIntoSelect(sel) {
+  try {
+    const data = await api('/api/answer-keys');
+    $(sel).innerHTML = '<option value="">-- anahtar seç --</option>' + data.keys.map(k => `<option value="${k.id}">${k.name} (${k.sheet_type})</option>`).join('');
+  } catch (e) { showError('Anahtarlar yüklenemedi: ' + e.message); }
+}
+async function computeScanScore() {
+  const keyId = $('#scanKeySelect').value;
+  if (!keyId) return;
+  const btn = $('#scanScoreBtn'); btn.disabled = true; btn.textContent = 'Hesaplanıyor...';
+  try {
+    const s = await api('/api/score', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answer_key_id: keyId, user_answers: scanAnswers }),
+    });
+    $('#scanScorePanel').innerHTML = `
+      <div class="total-score">
+        <div class="muted">Toplam</div>
+        <div class="total-net">net ${s.total.net.toFixed(2)}</div>
+        <div class="score-chip"><span style="color:var(--good)">D ${s.total.dogru}</span> · <span style="color:var(--bad)">Y ${s.total.yanlis}</span> · B ${s.total.bos}</div>
+      </div>
+      ${Object.entries(s.by_section).map(([n, sc]) => `<div class="score-line"><span>${n}</span><code>D${sc.dogru} Y${sc.yanlis} B${sc.bos} net ${sc.net.toFixed(2)}</code></div>`).join('')}
+    `;
+    for (const [name, sc] of Object.entries(s.by_section)) {
+      const chip = $(`[data-section="${name}"] [data-section-score]`);
+      if (chip) chip.textContent = `D${sc.dogru} Y${sc.yanlis} B${sc.bos} · net ${sc.net.toFixed(2)}`;
+    }
+  } catch (e) { showError(e.message); }
+  finally { btn.disabled = false; btn.textContent = 'Skorla'; }
+}
+
+// ============ BATCH ============
+let batchFiles = [];
+let batchItems = [];
+let batchScores = {};
+
+// Drag-and-drop on the batch upload area (in addition to click→pick)
+(function setupBatchDrop() {
+  const drop = document.querySelector('label[for="zipPick"]');
+  if (!drop) return;
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.classList.remove('drag');
+    if (e.dataTransfer.files.length === 0) return;
+    // Synthesize the same change-event handler logic
+    batchFiles = Array.from(e.dataTransfer.files);
+    const totalKB = Math.round(batchFiles.reduce((a, f) => a + f.size, 0) / 1024);
+    if (batchFiles.length === 1) {
+      $('#zipLabel').textContent = batchFiles[0].name + ' (' + totalKB + ' KB)';
+    } else {
+      $('#zipLabel').textContent = batchFiles.length + ' dosya seçildi (' + totalKB + ' KB)';
+    }
+    $('#batchScanBtn').disabled = false;
+  });
+})();
+
+$('#zipPick').addEventListener('change', e => {
+  batchFiles = Array.from(e.target.files);
+  if (batchFiles.length > 0) {
+    const totalKB = Math.round(batchFiles.reduce((a, f) => a + f.size, 0) / 1024);
+    if (batchFiles.length === 1) {
+      $('#zipLabel').textContent = batchFiles[0].name + ' (' + totalKB + ' KB)';
+    } else {
+      $('#zipLabel').textContent = batchFiles.length + ' dosya seçildi (' + totalKB + ' KB)';
+    }
+    $('#batchScanBtn').disabled = false;
+  }
+});
+
+$('#batchScanBtn').addEventListener('click', async () => {
+  if (batchFiles.length === 0) return;
+  clearError();
+  batchItems = []; batchScores = {};
+  const btn = $('#batchScanBtn'); btn.disabled = true; btn.textContent = 'Taranıyor...';
+  try {
+    let r;
+    if (batchFiles.length === 1 && batchFiles[0].name.toLowerCase().endsWith('.zip')) {
+      // ZIP upload (legacy path)
+      const form = new FormData(); form.append('zipfile', batchFiles[0]);
+      r = await api('/api/batch-scan', { method: 'POST', body: form });
+    } else {
+      // Multi-file upload (PDF/PNG/JPG/TIF mixed)
+      const form = new FormData();
+      for (const f of batchFiles) form.append('files', f);
+      r = await api('/api/batch-scan-files', { method: 'POST', body: form });
+    }
+    batchItems = r.items;
+    renderBatchTable();
+    $('#batchScoreBtn').disabled = false;
+    $('#batchCsvBtn').disabled = false;
+    $('#batchXlsxBtn').disabled = false;
+    $('#batchTxtBtn').disabled = false;
+    $('#batchSekonicBtn').disabled = false;
+    $('#batchExamXlsxBtn').disabled = false;
+  } catch (e) { showError(e.message); }
+  finally { btn.disabled = false; btn.textContent = 'Hepsini tara'; }
+});
+
+async function loadBatchKeys() {
+  try {
+    const data = await api('/api/answer-keys');
+    $('#batchKeySelect').innerHTML = '<option value="">cevap anahtarı seç</option>' + data.keys.map(k => `<option value="${k.id}">${k.name} (${k.sheet_type})</option>`).join('');
+  } catch (e) { showError(e.message); }
+}
+
+$('#batchScoreBtn').addEventListener('click', async () => {
+  const keyId = $('#batchKeySelect').value;
+  if (!keyId || batchItems.length === 0) return;
+  const btn = $('#batchScoreBtn'); btn.disabled = true; btn.textContent = 'Skorlanıyor...';
+  for (const item of batchItems) {
+    if (item.error || !item.scan_id) { batchScores[item.filename] = { error: item.error || 'no scan_id' }; continue; }
+    try {
+      const answers = {};
+      for (const [sec, val] of Object.entries(item.decoded || {})) {
+        if (val && typeof val === 'object' && 'answers' in val) answers[sec] = val.answers;
+      }
+      batchScores[item.filename] = await api('/api/score', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answer_key_id: keyId, user_answers: answers }),
+      });
+    } catch (e) { batchScores[item.filename] = { error: e.message }; }
+  }
+  renderBatchTable();
+  btn.disabled = false; btn.textContent = 'Hepsini skorla';
+});
+
+function renderBatchTable() {
+  if (batchItems.length === 0) { $('#batchTable').innerHTML = ''; return; }
+  const rows = batchItems.map(item => {
+    const dec = item.decoded || {};
+    const adi = dec['ADI_SOYADI'] || '<em class="muted">—</em>';
+    const kit = dec['KITAPCIK_TURU'] || '—';
+    let marked = 0, flags = 0;
+    for (const v of Object.values(dec)) {
+      if (v && typeof v === 'object' && 'answers' in v) {
+        marked += Object.values(v.answers).filter(x => x).length;
+        flags += (v.flags || []).length;
+      }
+    }
+    const s = batchScores[item.filename];
+    const net = (s && !s.error) ? s.total.net.toFixed(2) : (item.error ? '<span class="badge err">ERR</span>' : '—');
+    const flagBadge = flags > 5 ? `<span class="badge err">${flags}</span>` : flags > 0 ? `<span class="badge warn">${flags}</span>` : `<span class="muted">${flags}</span>`;
+    const overlayLink = item.scan_id ? `<a href="${apiBase()}${item.debug_image_url}" target="_blank" style="font-size:11px; color:var(--accent);">overlay</a>` : '';
+    return `<tr>
+      <td><code>${item.filename}</code></td>
+      <td>${adi}</td>
+      <td class="c">${kit}</td>
+      <td class="c">${item.page_detected ? '✓' : '—'}</td>
+      <td class="r">${marked}</td>
+      <td class="r">${flagBadge}</td>
+      <td class="r" style="font-weight:600;">${net}</td>
+      <td>${overlayLink}</td>
+    </tr>`;
+  }).join('');
+  $('#batchTable').innerHTML = `<div class="card" style="padding:0; overflow-x:auto;">
+    <table><thead><tr>
+      <th>Dosya</th><th>Ad Soyad</th><th class="c">Kit</th><th class="c">Page</th><th class="r">İşaretli</th><th class="r">Flag</th><th class="r">Net</th><th></th>
+    </tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+// Shared: assemble [{col: value}, ...] for any export
+function buildBatchRows() {
+  const sections = new Set();
+  for (const item of batchItems) {
+    for (const [sec, val] of Object.entries(item.decoded || {})) {
+      if (val && typeof val === 'object' && 'answers' in val) sections.add(sec);
+    }
+  }
+  const secList = Array.from(sections);
+  const cols = ['dosya','ad_soyad','kitapcik','page_det','isaretli','flag',
+    ...secList.flatMap(s => [s+'_D', s+'_Y', s+'_B', s+'_net']), 'toplam_net'];
+  const rows = batchItems.map(item => {
+    const dec = item.decoded || {};
+    const adi = dec['ADI_SOYADI'] || '';
+    const kit = dec['KITAPCIK_TURU'] || '';
+    let marked = 0, flags = 0;
+    for (const v of Object.values(dec)) if (v && typeof v === 'object' && 'answers' in v) {
+      marked += Object.values(v.answers).filter(x => x).length;
+      flags += (v.flags || []).length;
+    }
+    const s = batchScores[item.filename];
+    const row = { dosya: item.filename, ad_soyad: adi, kitapcik: kit,
+                  page_det: item.page_detected ? 1 : 0, isaretli: marked, flag: flags };
+    for (const sec of secList) {
+      if (s && !s.error) { const sc = s.by_section[sec];
+        row[sec+'_D'] = sc?.dogru ?? '';
+        row[sec+'_Y'] = sc?.yanlis ?? '';
+        row[sec+'_B'] = sc?.bos ?? '';
+        row[sec+'_net'] = sc?.net != null ? Number(sc.net.toFixed(2)) : '';
+      } else { row[sec+'_D'] = row[sec+'_Y'] = row[sec+'_B'] = row[sec+'_net'] = ''; }
+    }
+    row.toplam_net = (s && !s.error) ? Number(s.total.net.toFixed(2)) : '';
+    return row;
+  });
+  return { cols, rows };
+}
+
+function downloadBlob(blob, filename) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = filename; a.click();
+}
+
+$('#batchCsvBtn').addEventListener('click', () => {
+  if (batchItems.length === 0) return;
+  const { cols, rows } = buildBatchRows();
+  const csvRow = (vals) => vals.map(v => {
+    const s = String(v ?? '');
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  }).join(',');
+  const lines = [csvRow(cols)];
+  for (const r of rows) lines.push(csvRow(cols.map(c => r[c])));
+  downloadBlob(new Blob(["﻿" + lines.join('\n')], { type: 'text/csv;charset=utf-8' }),
+    'omr-batch-' + Date.now() + '.csv');
+});
+
+$('#batchXlsxBtn').addEventListener('click', () => {
+  if (batchItems.length === 0) return;
+  if (typeof XLSX === 'undefined') { showError('XLSX kütüphanesi yüklenmedi (CDN engellenmiş olabilir)'); return; }
+  const { cols, rows } = buildBatchRows();
+  const aoa = [cols, ...rows.map(r => cols.map(c => r[c] ?? ''))];
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = cols.map(c => ({ wch: Math.max(8, c.length + 2) }));
+  XLSX.utils.book_append_sheet(wb, ws, 'OMR Sonuçları');
+  XLSX.writeFile(wb, 'omr-batch-' + Date.now() + '.xlsx');
+});
+
+// ---- SEKONIC OMR fixed-width format (matches OPTİK-1294_SEKONIC.fmt) ----
+const TR_TO_ASCII = { 'Ç':'C','Ğ':'G','İ':'I','Ö':'O','Ş':'S','Ü':'U',
+                      'ç':'c','ğ':'g','ı':'i','ö':'o','ş':'s','ü':'u' };
+function trToAscii(s) {
+  return String(s || '').replace(/[ÇĞİÖŞÜçğıöşü]/g, c => TR_TO_ASCII[c] || c);
+}
+function rpad(s, n) { s = String(s ?? ''); return s.length >= n ? s.slice(0, n) : s + ' '.repeat(n - s.length); }
+function lpad(s, n) { s = String(s ?? ''); return s.length >= n ? s.slice(0, n) : ' '.repeat(n - s.length) + s; }
+
+function sectionAnswerString(decoded, sectionName, width) {
+  const sec = decoded?.[sectionName];
+  if (!sec || typeof sec !== 'object' || !('answers' in sec)) return ' '.repeat(width);
+  const answers = sec.answers;
+  let out = '';
+  for (let q = 1; q <= width; q++) {
+    const v = answers[String(q)];
+    out += (v && /^[A-E]$/.test(v)) ? v : ' ';
+  }
+  return out;
+}
+
+function buildSekonicLine(item) {
+  const dec = item.decoded || {};
+  const okul = lpad(String(dec.OKUL_KODU || '').replace(/[^0-9]/g, ''), 11);
+  const ogno = lpad(String(dec.OGRENCI_NUMARASI || '').replace(/[^0-9]/g, ''), 5);
+  const adi  = rpad(trToAscii(dec.ADI_SOYADI || '').toUpperCase(), 33);
+  // SINIF: template doesn't separate digits — first digit -> SINIF-1, second -> SINIF-2
+  const sinif = String(dec.SINIF_SUBE || '').replace(/[^0-9]/g, '');
+  const sinif1 = sinif[0] || ' ';
+  const sinif2 = sinif[1] || ' ';
+  const sube   = ' ';
+  const grup   = lpad(String(dec.GRUP_NO || '').replace(/[^0-9]/g, ''), 3);
+  const kit    = /^[A-D]$/.test(String(dec.KITAPCIK_TURU || '')) ? dec.KITAPCIK_TURU : ' ';
+  const turkce = sectionAnswerString(dec, 'Türkçe', 40);
+  const sosyal = sectionAnswerString(dec, 'Sosyal Bilimler', 46);
+  const matem  = sectionAnswerString(dec, 'Temel Matematik', 40);
+  const fen    = sectionAnswerString(dec, 'Fen Bilimleri', 40);
+  const line   = okul + ogno + adi + sinif1 + sinif2 + sube + grup + kit + turkce + sosyal + matem + fen;
+  // Guarantee exactly 222 chars
+  return rpad(line, 222).slice(0, 222);
+}
+
+// ---- Exam Excel (recipient's expected format: 12 cols, raw answer strings) ----
+function answer40(decoded, sectionName) {
+  const sec = decoded?.[sectionName];
+  if (!sec || typeof sec !== 'object' || !('answers' in sec)) return ' '.repeat(40);
+  const a = sec.answers;
+  let out = '';
+  for (let q = 1; q <= 40; q++) {
+    const v = a[String(q)];
+    out += (v && /^[A-E]$/.test(v)) ? v : ' ';
+  }
+  return out;
+}
+
+function splitTcOrTel(raw) {
+  const digits = String(raw || '').replace(/[^0-9]/g, '');
+  if (digits.length === 11) return { tc: digits, tel: null };
+  if (digits.length === 10 && digits[0] === '5') return { tc: null, tel: digits };
+  if (digits.length > 0) return { tc: null, tel: digits };  // unsure — put in Tel
+  return { tc: null, tel: null };
+}
+
+function intOrBlank(s) {
+  const v = String(s || '').replace(/[^0-9]/g, '').replace(/^0+/, '');
+  return v === '' ? null : parseInt(v, 10);
+}
+
+$('#batchExamXlsxBtn').addEventListener('click', () => {
+  if (batchItems.length === 0) return;
+  if (typeof XLSX === 'undefined') { showError('XLSX kütüphanesi yüklenmedi'); return; }
+  const cols = [
+    'Okul No', 'Okul Kodu', 'Sınıf', 'Şube', 'Adı Soyadı', 'Kitapçık',
+    'Kimlik No', 'Tel. No',
+    'Türk Dili ve Edebiyatı - Sosyal Bilimler 1',
+    'Sosyal Bilimler 2',
+    'Matematik',
+    'Fen Bilimleri',
+  ];
+  const aoa = [cols];
+  for (const item of batchItems) {
+    const dec = item.decoded || {};
+    const { tc, tel } = splitTcOrTel(dec.TC_KIMLIK);
+    const sinif = String(dec.SINIF_SUBE || '').replace(/[^0-9]/g, '');
+    const sube  = String(dec.SINIF_SUBE || '').replace(/[^A-ZÇĞİÖŞÜ]/gi, '').toUpperCase().slice(0, 1) || null;
+    // Name padded to 40 chars (matches answer-column width, recipient
+    // expects fixed-width string for downstream parsing).
+    const adiRaw = String(dec.ADI_SOYADI || '').trim();
+    const adiPadded = (adiRaw + ' '.repeat(40)).slice(0, 40);
+    aoa.push([
+      intOrBlank(dec.OGRENCI_NUMARASI),
+      intOrBlank(dec.OKUL_KODU),
+      sinif ? parseInt(sinif, 10) : null,
+      sube,
+      adiPadded,
+      /^[A-D]$/.test(String(dec.KITAPCIK_TURU || '')) ? dec.KITAPCIK_TURU : null,
+      tc,
+      tel ? Number(tel) : null,
+      answer40(dec, 'Türkçe'),
+      answer40(dec, 'Sosyal Bilimler'),
+      answer40(dec, 'Temel Matematik'),
+      answer40(dec, 'Fen Bilimleri'),
+    ]);
+  }
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = cols.map((c, i) => ({
+    wch: i >= 8 ? 42 : Math.max(8, c.length + 2),
+  }));
+  XLSX.utils.book_append_sheet(wb, ws, 'Sayfa1');
+  XLSX.writeFile(wb, 'omr-cevap-' + Date.now() + '.xlsx');
+});
+
+$('#batchSekonicBtn').addEventListener('click', () => {
+  if (batchItems.length === 0) return;
+  const lines = batchItems.map(buildSekonicLine);
+  // CRLF + ASCII encoding (Latin-1 byte arrays since we already transliterated)
+  const text = lines.join('\r\n') + '\r\n';
+  // Convert to Latin-1 bytes (single byte per char since all-ASCII after translit)
+  const bytes = new Uint8Array(text.length);
+  for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i) & 0xff;
+  downloadBlob(new Blob([bytes], { type: 'text/plain' }),
+    'omr-batch-' + Date.now() + '.txt');
+});
+
+$('#batchTxtBtn').addEventListener('click', () => {
+  if (batchItems.length === 0) return;
+  // Per-student tab-separated: ad \t kit \t <her section için cevap dizisi> \t net
+  // Cevap dizisi: pozisyon başına 1 harf (A-E veya '-' = boş)
+  const sections = new Set();
+  for (const item of batchItems) {
+    for (const [sec, val] of Object.entries(item.decoded || {})) {
+      if (val && typeof val === 'object' && 'answers' in val) sections.add(sec);
+    }
+  }
+  const secList = Array.from(sections);
+  const header = ['ad_soyad', 'kitapcik', ...secList, 'toplam_net'].join('\t');
+  const lines = [header];
+  for (const item of batchItems) {
+    const dec = item.decoded || {};
+    const adi = dec['ADI_SOYADI'] || '';
+    const kit = dec['KITAPCIK_TURU'] || '';
+    const secStrs = secList.map(sec => {
+      const a = dec[sec]?.answers || {};
+      const qs = Object.keys(a).map(Number).sort((x,y)=>x-y);
+      if (qs.length === 0) return '';
+      const maxQ = qs[qs.length - 1];
+      let s = '';
+      // Blank = SPACE (matches OPTİK-1294_SEKONIC.fmt convention)
+      for (let i = 1; i <= maxQ; i++) s += (a[String(i)] || ' ');
+      return s;
+    });
+    const sc = batchScores[item.filename];
+    const net = (sc && !sc.error) ? sc.total.net.toFixed(2) : '';
+    lines.push([adi, kit, ...secStrs, net].join('\t'));
+  }
+  downloadBlob(new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' }),
+    'omr-batch-' + Date.now() + '.txt');
+});
+
+// ============ KEYS ============
+async function loadKeys() {
+  try {
+    const data = await api('/api/answer-keys');
+    $('#keysList').innerHTML = data.keys.map(k => `
+      <div class="key-row">
+        <div>
+          <div style="font-weight:500;">${k.name}</div>
+          <code class="key-meta">${k.id} · ${k.sheet_type}</code>
+        </div>
+        <button class="danger-link" data-del-key="${k.id}">Sil</button>
+      </div>
+    `).join('');
+    $$('[data-del-key]').forEach(b => b.addEventListener('click', async () => {
+      if (!confirm('Sil: ' + b.dataset.delKey + '?')) return;
+      try { await api('/api/answer-keys/' + encodeURIComponent(b.dataset.delKey), { method: 'DELETE' }); loadKeys(); }
+      catch (e) { showError(e.message); }
+    }));
+  } catch (e) { showError(e.message); }
+}
+
+function parseAnswerString(raw, maxRow) {
+  const tokens = raw.replace(/[,;]/g,' ').split(/\s+/).filter(Boolean);
+  const numbered = tokens.some(t => /^\d+[=:]?[A-Ea-e]$/.test(t));
+  const out = {};
+  if (numbered) {
+    for (const tok of tokens) {
+      const m = tok.match(/^(\d+)[=:]?([A-Ea-e])$/);
+      if (m) { const q = parseInt(m[1], 10); if (q >= 1 && q <= maxRow) out[String(q)] = m[2].toUpperCase(); }
+    }
+  } else {
+    const letters = raw.toUpperCase().replace(/[^A-EX]/g,'');
+    for (let i = 0; i < letters.length && i < maxRow; i++) {
+      const ch = letters[i];
+      if (OPTIONS.includes(ch)) out[String(i+1)] = ch;
+    }
+  }
+  return out;
+}
+
+function renderNewKeySections() {
+  $('#newKeySections').innerHTML = SECTIONS.map(s => `
+    <div class="section-input">
+      <label>${s.name} <span class="muted">(1-${s.rows}) · <span data-count="${s.name}">0</span> cevap algılandı</span></label>
+      <textarea data-section="${s.name}" rows="3" placeholder="${s.name === 'Türkçe' ? 'ABCDEABCDE... (40 harf) veya 1A 2B 3C ...' : '(boş bırak veya '+s.rows+' cevap yapıştır)'}"></textarea>
+    </div>
+  `).join('');
+  $$('[data-section]').forEach(ta => ta.addEventListener('input', () => {
+    const sec = ta.dataset.section;
+    const max = SECTIONS.find(s => s.name === sec).rows;
+    const count = Object.keys(parseAnswerString(ta.value, max)).length;
+    $('[data-count="'+sec+'"]').textContent = count;
+  }));
+}
+renderNewKeySections();
+
+$('#newKeySaveBtn').addEventListener('click', async () => {
+  clearError();
+  try {
+    const id = $('#newKeyId').value.trim();
+    const name = $('#newKeyName').value.trim();
+    const sheet_type = $('#newKeySheetType').value;
+    if (!id || !name) throw new Error('id ve görünür ad zorunlu');
+    const answers = {};
+    for (const s of SECTIONS) {
+      const ta = $(`[data-section="${s.name}"]`);
+      const parsed = parseAnswerString(ta.value, s.rows);
+      if (Object.keys(parsed).length > 0) answers[s.name] = parsed;
+    }
+    if (Object.keys(answers).length === 0) throw new Error('en az bir bölüm doldur');
+    await api('/api/answer-keys', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, name, sheet_type, answers }),
+    });
+    $('#newKeyId').value = ''; $('#newKeyName').value = '';
+    $$('[data-section]').forEach(ta => ta.value = '');
+    $$('[data-count]').forEach(el => el.textContent = '0');
+    loadKeys();
+    alert('Anahtar kaydedildi: ' + name);
+  } catch (e) { showError(e.message); }
+});
+
+setupSingleUpload();
+</script>
+</body>
+</html>
