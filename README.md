@@ -8,8 +8,8 @@ servisine (`omr_ml_pipeline/api`) konuşur.
 ### 1) Backend (FastAPI, port 8765)
 
 ```bash
-cd /Users/ardabilgehan/Desktop/omr_ml_pipeline/api
-/Users/ardabilgehan/miniforge3/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8765
+cd <omr_ml_pipeline>/api    # ayrı repo: OMR/skorlama backend'i
+python -m uvicorn main:app --host 127.0.0.1 --port 8765
 ```
 
 Sağlık kontrolü:
@@ -21,14 +21,13 @@ curl http://127.0.0.1:8765/api/health
 ### 2) Frontend (Next.js, port 3000)
 
 ```bash
-cd /Users/ardabilgehan/Desktop/yks-omr-web
 npm install   # ilk seferde
 npm run dev
 ```
 
-Tarayıcıda: <http://localhost:3001> (bu makinede 3000 portu başka bir Next dev
-server tarafından tutulduğu için Next 3001'e düşer; backend CORS
-`http://(localhost|127.0.0.1):*` pattern'iyle hangi portta olursa olsun izin verir).
+Tarayıcıda: <http://localhost:3000> (port doluysa Next otomatik bir sonraki porta
+düşer; backend CORS `http://(localhost|127.0.0.1):*` pattern'iyle hangi portta
+olursa olsun izin verir).
 
 ## Konfigürasyon
 
